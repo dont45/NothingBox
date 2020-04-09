@@ -9,3 +9,7 @@ use an Atmel Mega16.
 MY build will include eight toggle switches which the 'user' can toggle on, 
 along with a robotic finger which will turn them off in the exact order in
 which they were turned on.
+
+Examole of someone else's box can be seen in action here.
+My only plagerism is watching this video.  
+The design and firmware are all of my own creation.
