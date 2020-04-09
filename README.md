@@ -13,5 +13,8 @@ which they were turned on.
 Example of someone else's box can be seen in action here:
 https://youtu.be/Nqk_nWAjBus
 
+Or this one:
+https://youtu.be/66Tlc1354So
+
 My only plagerism is watching this video.  
 The design and firmware are all of my own creation.
