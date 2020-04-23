@@ -1,0 +1,286 @@
+;***** Servo Testing *****
+;Build Servo code for NothingBox
+;
+;Author:
+;		Don Thompson
+;		April 2020
+;
+;Version:v1.2
+;Project:
+;		Testing Bi-polar Servo Motor
+;		driven by Pololu md09a 4899
+;
+;
+;
+;****DEBUG
+;  		CHANGE PORTD for sw input
+;		PORTB = LEDs, output
+;		PORTC = MOTOR, output
+;       CHANGE StepsRv to 200
+;       CHANGE DELAY IN r17 to 0,1
+
+#define RUN_STOPS_REVERSE
+;#define RUNFULL_REVERSE
+
+.include "m16def.inc"
+
+.equ 	StepsRv=200		;***<<<200 ***testing Steps per Revolution
+
+;		set motor control pins, direction and step 
+.equ	DirPin=0x01	;bit 0 of PORTC 
+.equ	StepPin=0x02	;bit 1 of PORTC
+
+.def	Delay	=r20
+.def	Delay2	=r21
+
+.def	Mask	=r23
+                         
+     .CSEG
+;**** Initialization ****
+                 
+; 		Initialize Stack
+		ldi	 r16,LOW(RAMEND)
+ 		out  SPL,r16
+		ldi	 r16, HIGH(RAMEND)
+		out  SPH,r16
+                 
+; 		Initialize ports for IO
+;		PORTB = LEDs
+;		PORTC = stepper motor
+;		PORTD = switches
+		ldi  r16,(DirPin | StepPin)
+		out	 DDRC,r16		;set PORTC:bits0,1 to output		
+		ldi  r16,0xff
+		out  DDRB,r16		;LEDs
+		out  PORTB,r16		;LEDs
+		clr  r16
+		out  PORTC,r16
+		ldi  r23,0xff
+
+;		Initialize PORTD for Switch Input
+		ser	 r17
+		clr	 r16
+		out  DDRD,r16			;PORTD input with pullups	
+		out  PORTD,r17			;turn on pull-ups on PORTD
+
+
+; Initialize all servos and calibrate ??
+
+		call calServo	;calibrate servo limits
+loop:					;main loop
+		call runcw
+		call Dly1
+		call runccw
+		call Dly1
+		rjmp loop		;keep doing it
+
+
+;run motor clockwise
+;r16 = number of steps to turn motor
+;r17 = controller command port: dir and step
+;r18 = dir pin
+;r18 = motor speed, amount of delay in Dly18 routine
+;r19 = scratch reg
+runcw:						;run motor one revolution cw
+;		ldi  r25,StepsRv	;no steps per revolution
+		ldi  r26,2			;number of complete revolutions
+		ldi  r17,0
+		ori  r18,DirPin		;set direction cw
+
+runcw2:
+		ldi  r25,StepsRv
+runcw1:	
+		ori  r17,StepPin	;step the motor
+		out  PORTC,r17
+		call Dly1			;delay
+		ldi  r19,StepPin
+		eor  r17,r19		;shut off StepPin-end step
+		out  PORTC,r17
+		call Dly1
+		dec  r25	
+		brne runcw1;
+		dec  r26
+		brne runcw2
+		ret
+
+#ifdef RUN_STOPS_REVERSE
+;run to 4 stop points at slow speed
+runccw:
+;Now run counter clockwise to stop points (4 stops)
+;		ldi  r25,(StepsRv>>2)
+		ldi  r26,1			;???number of revolutions
+		ldi  r18,DirPin
+		eor  r17,r18		;shut off DirPin, ccw
+runccw2:
+		ldi  r23,1
+		clr  r3
+		dec  r3				;to 0xff
+		mov  r2,r23
+		ldi  r23,8			;run to four points
+runccw3:
+		call runccpt		;run to four points
+;output stop point set in led: pt# in r23
+		call showBit
+		call dlyms
+		call dlyms
+		lsl  r2
+		dec  r23
+;output stop point clear in led
+		brne runccw3
+		dec  r26
+		brne runccw2
+		ret
+
+;run cc to point
+runccpt:
+		ldi  r25,(StepsRv>>3)
+runccw1:
+		ori  r17,StepPin	;step the motor
+		out  PORTC,r17
+		call Dly1			;delay
+		call Dly1
+		ldi  r19,StepPin
+		eor  r17,r19		;shut off StepPin-end step
+		out  PORTC,r17
+		call Dly1
+		call Dly1
+		dec  r25	
+		brne runccw1
+		ret
+#endif
+
+;just run slow speed to full reverse
+#ifdef RUNFULL_REVERSE
+runccw:
+;Now run counter clockwise
+;		ldi  r25,StepsRv
+		ldi  r26,1			;number of revolutions
+		ldi  r18,DirPin
+		eor  r17,r18		;shut off DirPin, ccw
+runccw2:
+		ldi  r25,StepsRv
+runccw1:
+		ori  r17,StepPin	;step the motor
+		out                                ,r17
+		call Dly1			;delay
+		call Dly1
+		ldi  r19,StepPin
+		eor  r17,r19		;shut off StepPin-end step
+		out  PORTC,r17
+		call Dly1
+		call Dly1
+		dec  r25	
+		brne runccw1
+		dec  r26
+		brne runccw2
+		ret
+#endif
+
+;output single bit to PORTB
+;all other bits 0
+;note led's are lit with 0, off with 1
+;input is bit number in r23 ??
+
+showBit:
+		push r19
+		push r20
+		mov  r20,r23;	;get n in r23
+		clr  r19
+		sec				;carry bit to shift
+showb1: rol  r19
+		dec  r20
+		brne showb1		;shift c into n pos
+						;00010000
+		dec  r20		;oxff
+		eor  r19,r20	;11101111
+		out  PORTB,r19	
+		call Dlyms
+		call Dlyms
+		clr  r19
+		eor  r19,r20
+		out  PORTB,r19
+		pop  r20
+		pop  r19
+		ret
+
+;calibrate servo end points to limit switches
+;beginnings: rotate ccw until left limit switches
+;left limit = s7, right limit = s0
+;flash led7 until left is calibrated, 
+;then flash led0 until right is calibrated
+;**** for now just left margin
+
+calServo:
+		;left calibrate
+		;check left: s7
+		;set pos = 0 :** after left stop is reached
+		ldi  r16,0b00001111
+		call Dlyms
+		out  PORTB, r16
+		ldi  r17,0xff
+		ori  r17,DirPin
+		out  PORTC,r17			;set step dir Reverse
+calS0:
+		in 	 r16,PIND
+		andi r16,0b10000000		;check sw7
+		breq calS1
+		call stepServo			;step servo ccw
+		;inc pos
+		rjmp calS0
+calS1:	;set servo pos to zero, left margin
+		;from now on, pos must count steps l/r
+		;where is servo pos stored??
+		ldi  r16,0xff
+		out  PORTB,r16
+		;***more to do here
+		;store pos 
+		ret
+
+;step servo one step ccw
+stepServo:
+		ori  r17,StepPin	;step the motor
+		out  PORTC,r17
+		call Dly1			;delay
+		call Dly1
+		call Dly1
+		call Dly1
+		ldi  r19,StepPin
+		eor  r17,r19		;shut off StepPin-end step
+		out  PORTC,r17
+		call Dly1
+		call Dly1
+		call Dly1
+		call Dly1
+		ret
+
+;Delay Routine, 3 microsec per loop
+;loop in Dly for r18 times
+;for r18 eq 0, max loop time is 769us.
+Dly:
+		dec  r24
+		brne Dly
+   		ret
+
+;Delay for 500us
+Dly5:
+		ldi  r24,166
+		call Dly
+		ret
+
+;Delay for 1000us
+Dly1:
+        clr  r24
+		call Dly
+		ldi  r24,76
+		call Dly
+		ret
+	
+;Delay for n milisecond, n=r19
+	
+Dlyms:
+		ldi  r19,0xff
+Dlyms1:
+	    call Dly1
+		dec  r19
+		brne Dlyms1
+		ret
